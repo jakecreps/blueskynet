@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+        button {
+            padding: 10px 15px;
+            font-size: 14px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #status {
+            margin-top: 10px;
+            font-weight: bold;
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <h1>Login</h1>
+    <form id="loginForm">
+        <label for="username">Username:</label>
+        <input 
+            type="text" 
+            id="username" 
+            name="username" 
+            placeholder="Enter your BlueSky username (e.g., john.doe.bsky.social)" 
+            required
+        ><br><br>
+
+        <label for="password">Password:</label>
+        <input 
+            type="password" 
+            id="password" 
+            name="password" 
+            placeholder="Enter your BlueSky password" 
+            required
+        ><br><br>
+
+        <button type="submit">Login</button>
+    </form>
+    <p id="status"></p>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async function (event) {
+            event.preventDefault();
+
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const statusEl = document.getElementById('status');
+
+            statusEl.textContent = 'Logging in...';
+
+            try {
+                const response = await fetch('https://amanita.us-east.host.bsky.network/xrpc/com.atproto.server.createSession', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        identifier: username,
+                        password: password,
+                    }),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                const token = data?.accessJwt;
+
+                if (token) {
+                    // Save token in localStorage
+                    localStorage.setItem('bearerToken', token);
+                    statusEl.style.color = 'green';
+                    statusEl.textContent = 'Login successful! Redirecting...';
+
+                    // Redirect to the search page
+                    setTimeout(() => {
+                        window.location.href = 'index.html';
+                    }, 1000);
+                } else {
+                    throw new Error('Token generation failed.');
+                }
+            } catch (error) {
+                console.error('Login failed:', error);
+                statusEl.textContent = 'Login failed. Please check your username/password.';
+            }
+        });
+    </script>
+</body>
+</html>

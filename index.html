@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BlueSkyNet</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        input[type="text"],
+        input[type="number"],
+        input[type="date"],
+        select {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+        button {
+            padding: 10px 15px;
+            font-size: 14px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #loginButton {
+            float: right;
+            margin-bottom: 20px;
+        }
+        #status {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        .result-item {
+            display: flex;
+            align-items: flex-start;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .avatar-wrapper {
+            margin-right: 10px;
+        }
+        .post-image {
+            max-width: 500px;
+            max-height: 300px;
+            display: block;
+            margin-top: 10px;
+            border-radius: 10px;
+        }
+        .people-avatar {
+            max-width: 50px;
+            max-height: 50px;
+            border-radius: 50%;
+        }
+        .feed-avatar {
+            max-width: 100px;
+            max-height: 100px;
+            border-radius: 10%;
+        }
+        .text-wrapper {
+            flex: 1;
+        }
+        .text-wrapper h3 {
+            margin: 0 0 5px 0;
+        }
+        #downloadCsv {
+            margin-top: 20px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <button id="loginButton">Login</button>
+    <h1>BlueSkyNet</h1>
+    <form id="apiForm">
+        <!-- Advanced Search Options -->
+        <label for="endpoint">Select Endpoint:</label>
+        <select id="endpoint" name="endpoint" required>
+            <option value="top">Top Posts</option>
+            <option value="latest">Latest Posts</option>
+            <option value="people">People</option>
+            <option value="feeds">Feeds</option>
+        </select><br>
+
+        <label for="query">Keyword:</label>
+        <input type="text" id="query" name="query" placeholder="e.g., osint"><br>
+
+        <label for="exact">Keyphrase:</label>
+        <input type="text" id="exact" name="exact" placeholder="e.g., 'osint newsletter'"><br>
+
+        <label for="hashtag">Hashtag:</label>
+        <input type="text" id="hashtag" name="hashtag" placeholder="e.g., #osint"><br>
+
+        <label for="mention">User Mention:</label>
+        <input type="text" id="mention" name="mention" placeholder="e.g., @username"><br>
+
+        <label for="fromUser">From User:</label>
+        <input type="text" id="fromUser" name="fromUser" placeholder="e.g., from:username"><br>
+
+        <label for="toUser">To User:</label>
+        <input type="text" id="toUser" name="toUser" placeholder="e.g., to:username"><br>
+
+        <label for="since">Since (Date):</label>
+        <input type="date" id="since" name="since"><br>
+
+        <label for="until">Until (Date):</label>
+        <input type="date" id="until" name="until"><br>
+
+        <label for="lang">Language:</label>
+        <select id="lang" name="lang">
+            <option value="">Any</option>
+            <option value="en">English</option>
+            <option value="es">Spanish</option>
+            <option value="fr">French</option>
+        </select><br>
+
+        <label for="media">Media Type:</label>
+        <select id="media" name="media">
+            <option value="">Any</option>
+            <option value="images">Images</option>
+            <option value="links">Links</option>
+        </select><br>
+
+        <label for="limit">Limit (number of items):</label>
+        <input type="number" id="limit" name="limit" placeholder="e.g., 500" required><br>
+
+        <button type="submit">Search</button>
+    </form>
+
+    <div id="status"></div>
+    <div id="response"></div>
+    <button id="downloadCsv">Download CSV</button>
+
+    <script>
+        let currentResults = [];
+        let currentEndpoint = '';
+
+        // Navigate to the login page
+        document.getElementById('loginButton').addEventListener('click', () => {
+            window.location.href = 'login.html';
+        });
+
+        // Check for token on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            const token = localStorage.getItem('bearerToken');
+            if (!token) {
+                alert('You need to log in first!');
+                window.location.href = 'login.html';
+            }
+        });
+
+        document.getElementById('apiForm').addEventListener('submit', async function (event) {
+            event.preventDefault();
+
+            const endpoint = document.getElementById('endpoint').value;
+            currentEndpoint = endpoint;
+            const query = document.getElementById('query').value;
+            const exact = document.getElementById('exact').value ? `"${document.getElementById('exact').value}"` : '';
+            const hashtag = document.getElementById('hashtag').value;
+            const mention = document.getElementById('mention').value;
+            const fromUser = document.getElementById('fromUser').value;
+            const toUser = document.getElementById('toUser').value;
+            const since = document.getElementById('since').value ? `since:${document.getElementById('since').value}` : '';
+            const until = document.getElementById('until').value ? `until:${document.getElementById('until').value}` : '';
+            const lang = document.getElementById('lang').value ? `lang:${document.getElementById('lang').value}` : '';
+            const media = document.getElementById('media').value ? `filter:${document.getElementById('media').value}` : '';
+            const limit = parseInt(document.getElementById('limit').value, 10);
+
+            const filters = [query, exact, hashtag, mention, fromUser, toUser, since, until, lang, media].filter(Boolean).join(' ');
+
+            const token = localStorage.getItem('bearerToken');
+            if (!token) {
+                alert('Authorization token not set! Redirecting to login...');
+                window.location.href = 'login.html';
+                return;
+            }
+
+            const headers = {
+                'accept': '*/*',
+                'authorization': `Bearer ${token}`,
+            };
+
+            let url = '';
+            if (endpoint === 'top') {
+                url = `https://amanita.us-east.host.bsky.network/xrpc/app.bsky.feed.searchPosts?q=${encodeURIComponent(filters)}&sort=top&limit=${limit}`;
+            } else if (endpoint === 'latest') {
+                url = `https://amanita.us-east.host.bsky.network/xrpc/app.bsky.feed.searchPosts?q=${encodeURIComponent(filters)}&sort=latest&limit=${limit}`;
+            } else if (endpoint === 'people') {
+                url = `https://amanita.us-east.host.bsky.network/xrpc/app.bsky.actor.searchActors?q=${encodeURIComponent(filters)}&limit=${limit}`;
+            } else if (endpoint === 'feeds') {
+                url = `https://amanita.us-east.host.bsky.network/xrpc/app.bsky.unspecced.getPopularFeedGenerators?query=${encodeURIComponent(filters)}&limit=${limit}`;
+            }
+
+            const statusEl = document.getElementById('status');
+            const responseEl = document.getElementById('response');
+            const downloadButton = document.getElementById('downloadCsv');
+            statusEl.textContent = 'Fetching results...';
+            responseEl.innerHTML = '';
+            downloadButton.style.display = 'none';
+
+            try {
+                const response = await fetch(url, { method: 'GET', headers });
+                const data = await response.json();
+                currentResults = data.posts || data.actors || data.feeds || [];
+
+                if (currentResults.length > 0) {
+                    statusEl.textContent = `Fetched ${currentResults.length} results successfully!`;
+                    responseEl.innerHTML = renderResults(currentResults, endpoint);
+                    downloadButton.style.display = 'inline-block';
+                } else {
+                    statusEl.textContent = 'No results found.';
+                }
+            } catch (error) {
+                console.error(error);
+                statusEl.textContent = 'Failed to fetch results. Check the console for details.';
+            }
+        });
+
+        document.getElementById('downloadCsv').addEventListener('click', () => {
+            if (!currentResults.length) {
+                alert('No results to export.');
+                return;
+            }
+
+            const csvContent = generateCsvContent(currentResults, currentEndpoint);
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${currentEndpoint}_results.csv`;
+            link.click();
+            URL.revokeObjectURL(url);
+        });
+
+        function renderResults(results, endpoint) {
+            return results.map(result => {
+                if (endpoint === 'people') {
+                    return `
+                        <div class="result-item">
+                            <div class="avatar-wrapper">
+                                ${result.avatar ? `<img src="${result.avatar}" class="people-avatar" alt="${result.displayName || result.handle}">` : ''}
+                            </div>
+                            <div class="text-wrapper">
+                                <h3>${result.displayName || 'Unknown'} (@${result.handle || 'Unknown'})</h3>
+                                <p>${result.description || 'No description available.'}</p>
+                            </div>
+                        </div>
+                    `;
+                } else if (endpoint === 'feeds') {
+                    return `
+                        <div class="result-item">
+                            <div class="avatar-wrapper">
+                                ${result.creator?.avatar ? `<img src="${result.creator.avatar}" class="feed-avatar" alt="${result.creator.displayName || result.creator.handle}">` : ''}
+                            </div>
+                            <div class="text-wrapper">
+                                <h3>${result.displayName || 'Unknown Feed'}</h3>
+                                <p>${result.description || 'No description available.'}</p>
+                                <p><strong>Creator:</strong> ${result.creator?.displayName || result.creator?.handle || 'Unknown'}</p>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    return `
+                        <div class="result-item">
+                            <div class="avatar-wrapper">
+                                ${result.author?.avatar ? `<img src="${result.author.avatar}" class="people-avatar" alt="${result.author.displayName || 'Unknown Author'}">` : ''}
+                            </div>
+                            <div class="text-wrapper">
+                                <h3>${result.author?.displayName || 'Unknown Author'} (@${result.author?.handle || 'Unknown'})</h3>
+                                <p>${result.record?.text || 'No text available'}</p>
+                                ${result.embed?.images?.[0]?.fullsize ? `<img src="${result.embed.images[0].fullsize}" class="post-image" alt="Post image">` : ''}
+                            </div>
+                        </div>
+                    `;
+                }
+            }).join('');
+        }
+
+        function generateCsvContent(results, endpoint) {
+            if (endpoint === 'people') {
+                const headers = ['Name', 'Handle', 'Description'];
+                const rows = results.map(result => [
+                    `"${result.displayName || ''}"`,
+                    `"${result.handle || ''}"`,
+                    `"${result.description || ''}"`
+                ].join(','));
+
+                return [headers.join(','), ...rows].join('\n');
+            } else if (endpoint === 'feeds') {
+                const headers = ['Feed Name', 'Description', 'Creator'];
+                const rows = results.map(feed => [
+                    `"${feed.displayName || ''}"`,
+                    `"${feed.description || ''}"`,
+                    `"${feed.creator?.displayName || feed.creator?.handle || ''}"`
+                ].join(','));
+
+                return [headers.join(','), ...rows].join('\n');
+            } else {
+                const headers = ['Author', 'Handle', 'Text', 'Image URL'];
+                const rows = results.map(post => [
+                    `"${post.author?.displayName || ''}"`,
+                    `"${post.author?.handle || ''}"`,
+                    `"${post.record?.text || ''}"`,
+                    `"${post.embed?.images?.[0]?.fullsize || ''}"`
+                ].join(','));
+
+                return [headers.join(','), ...rows].join('\n');
+            }
+        }
+    </script>
+</body>
+</html>
